@@ -148,6 +148,23 @@ uci add_list dhcp.@dnsmasq[0].address='/sukkaw.com/'
 uci add_list dhcp.@dnsmasq[0].address='/szbdyd.com/'
 uci set firewall.Allow_Ping.target='DROP'
 uci set firewall.@defaults[0].fullcone='0'
+
+target_idx=$(uci show firewall | grep "name='Allow-ICMPv6-Input'" | cut -d'[' -f2 | cut -d']' -f1)
+
+if [ -n "$target_idx" ]; then
+    uci add firewall rule
+    # 移动到目标规则下方
+    uci reorder firewall.@rule[-1]=$((target_idx + 1))
+    
+    # 配置新规则 icmpv6
+    uci set firewall.@rule[-1].name='icmpv6'
+    uci set firewall.@rule[-1].src='wan'
+    uci set firewall.@rule[-1].dest='*'
+    uci set firewall.@rule[-1].proto='icmp'
+    uci set firewall.@rule[-1].family='ipv6'
+    uci set firewall.@rule[-1].icmp_type='echo-request echo-reply'
+    uci set firewall.@rule[-1].target='DROP'
+fi
 uci commit
 
 exit 0
