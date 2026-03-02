@@ -137,15 +137,17 @@ fi
 uci delete network.globals.ula_prefix
 uci set dhcp.@dnsmasq[0].min_cache_ttl='600'
 uci add_list dhcp.@dnsmasq[0].address='/appsflyer.com/'
-uci add_list dhcp.@dnsmasq[0].address='/bangbang93.com/'
 uci add_list dhcp.@dnsmasq[0].address='/bugly.qq.com/'
 uci add_list dhcp.@dnsmasq[0].address='/chat.bilibili.com/'
-uci add_list dhcp.@dnsmasq[0].address='/dns.google/'
 uci add_list dhcp.@dnsmasq[0].address='/graph.facebook.com/'
 uci add_list dhcp.@dnsmasq[0].address='/mcdn.bilivideo.cn/'
 uci add_list dhcp.@dnsmasq[0].address='/mcdn.bilivideo.com/'
+uci add_list dhcp.@dnsmasq[0].address='/skk.moe/'
 uci add_list dhcp.@dnsmasq[0].address='/smtcdns.net/'
+uci add_list dhcp.@dnsmasq[0].address='/sukkaw.com/'
 uci add_list dhcp.@dnsmasq[0].address='/szbdyd.com/'
+uci set firewall.Allow_Ping.target='DROP'
+uci set firewall.@defaults[0].fullcone='0'
 uci commit
 
 exit 0
