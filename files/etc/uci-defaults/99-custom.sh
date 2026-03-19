@@ -130,25 +130,32 @@ elif [ "$count" -gt 1 ]; then
     uci commit network
 fi
 
-# 1. 关掉 Fullcone
+# 1. 关闭 Fullcone NAT
 uci set firewall.@defaults[0].fullcone='0'
 
-# 2. 只有这一行是改 Allow-Ping 的（假设名称固定）
-uci set firewall.Allow_Ping.target='DROP'
+# 2. 修改 Allow-Ping (匹配你在网页上看到的连字符名称)
+# 这一行逻辑：找到名字叫 Allow-Ping 的规则行号，并把它设为 DROP
+idx=$(uci show firewall | grep "name='Allow-Ping'" | cut -d'[' -f2 | cut -d']' -f1)
+[ -n "$idx" ] && uci set firewall.@rule[$idx].target='DROP'
 
-# 3. 创建并插入新规则（这步没办法，因为它原本不存在）
-uci set firewall.v6_drop=rule
-uci set firewall.v6_drop.name='icmpv6'
-uci set firewall.v6_drop.src='wan'
-uci set firewall.v6_drop.proto='icmp'
-uci set firewall.v6_drop.family='ipv6'
-uci set firewall.v6_drop.icmp_type='echo-request echo-reply'
-uci set firewall.v6_drop.target='DROP'
+# 3. 创建 icmpv6 规则并强制设为“仅 IPv6”
+# 给它一个临时 ID 'my_v6_rule' 确保不串号，不带任何端口
+uci set firewall.my_v6_rule=rule
+uci set firewall.my_v6_rule.name='icmpv6'
+uci set firewall.my_v6_rule.src='wan'
+uci set firewall.my_v6_rule.dest='*'
+uci set firewall.my_v6_rule.proto='icmp'
+uci set firewall.my_v6_rule.family='ipv6'
+uci set firewall.my_v6_rule.icmp_type='echo-request echo-reply'
+uci set firewall.my_v6_rule.target='DROP'
 
-# 4. 挪位置
-uci reorder firewall.v6_drop=$(($(uci show firewall | grep "Allow-ICMPv6-Input" | cut -d'[' -f2 | cut -d']' -f1) + 1))
+# 4. 精准插队到 Allow-ICMPv6-Input 下方
+target_pos=$(uci show firewall | grep "name='Allow-ICMPv6-Input'" | cut -d'[' -f2 | cut -d']' -f1)
+if [ -n "$target_pos" ]; then
+    uci reorder firewall.my_v6_rule=$((target_pos + 1))
+fi
 
-# 5. 提交
+# 5. 一次性提交修改
 uci commit firewall
 
 # 其他
