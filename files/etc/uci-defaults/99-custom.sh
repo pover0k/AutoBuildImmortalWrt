@@ -130,42 +130,28 @@ elif [ "$count" -gt 1 ]; then
     uci commit network
 fi
 
-# 1. 关闭 Fullcone NAT
+# 1. 基础设置
 uci set firewall.@defaults[0].fullcone='0'
 
-# 2. 修改 Allow-Ping
+# 2. 修改 Allow-Ping (IPv4)
 idx=$(uci show firewall | grep "name='Allow-Ping'" | cut -d'[' -f2 | cut -d']' -f1)
 [ -n "$idx" ] && uci set firewall.@rule[$idx].target='DROP'
 
-# 3. 创建 icmpv6 规则 (强制仅 IPv6，防止带入多余端口)
-uci set firewall.my_v6_rule=rule
-uci set firewall.my_v6_rule.name='icmpv6'
-uci set firewall.my_v6_rule.src='wan'
-uci set firewall.my_v6_rule.dest='*'
-uci set firewall.my_v6_rule.proto='icmp'
-uci set firewall.my_v6_rule.family='ipv6'
-uci set firewall.my_v6_rule.icmp_type='echo-request echo-reply'
-uci set firewall.my_v6_rule.target='DROP'
-
-# 4. 修复位置挪动逻辑 (仅在此处打补丁：兼容有无中括号的情况)
-target_pos=""
-count=0
-# 按顺序逐个读取所有规则的内部代号
-for sec in $(uci show firewall | grep "=rule" | cut -d'=' -f1 | cut -d'.' -f2); do
-    # 只要名字匹配上 Allow-ICMPv6-Input，就记录当前的真实序号
-    if [ "$(uci -q get firewall.$sec.name)" = "Allow-ICMPv6-Input" ]; then
-        target_pos=$count
-        break
-    fi
-    count=$((count + 1))
-done
-
-if [ -n "$target_pos" ]; then
-    # 挪动到目标序号的下一行
-    uci reorder firewall.my_v6_rule=$((target_pos + 1))
+# 3. 精准“剔除” Allow-ICMPv6-Forward 中的 echo-request
+# 逻辑：获取当前值 -> 删掉那个单词 -> 写回
+idx=$(uci show firewall | grep "name='Allow-ICMPv6-Forward'" | cut -d'[' -f2 | cut -d']' -f1)
+if [ -n "$idx" ]; then
+    # 第一步：拿到现有的所有类型（不管它原本有什么）
+    current_types=$(uci -q get firewall.@rule[$idx].icmp_type)
+    
+    # 第二步：把 "echo-request" 从这个字符串里变没（利用 sed 替换为空）
+    new_types=$(echo "$current_types" | sed 's/echo-request//g' | sed 's/  */ /g')
+    
+    # 第三步：把剩下的东西原封不动放回去
+    uci set firewall.@rule[$idx].icmp_type="$new_types"
 fi
 
-# 5. 一次性提交修改
+# 4. 提交
 uci commit firewall
 
 # 其他
