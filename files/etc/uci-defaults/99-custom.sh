@@ -130,28 +130,20 @@ elif [ "$count" -gt 1 ]; then
     uci commit network
 fi
 
-# 1. 基础设置
+# 1. 取消 Fullcone NAT
 uci set firewall.@defaults[0].fullcone='0'
 
-# 2. 修改 Allow-Ping (IPv4)
+# 2. 修改 Allow-Ping (IPv4 入站)
 idx=$(uci show firewall | grep "name='Allow-Ping'" | cut -d'[' -f2 | cut -d']' -f1)
 [ -n "$idx" ] && uci set firewall.@rule[$idx].target='DROP'
 
-# 3. 精准“剔除” Allow-ICMPv6-Forward 中的 echo-request
-# 逻辑：获取当前值 -> 删掉那个单词 -> 写回
+# 3. 完美剔除 Allow-ICMPv6-Forward 中的 echo-request
 idx=$(uci show firewall | grep "name='Allow-ICMPv6-Forward'" | cut -d'[' -f2 | cut -d']' -f1)
 if [ -n "$idx" ]; then
-    # 第一步：拿到现有的所有类型（不管它原本有什么）
-    current_types=$(uci -q get firewall.@rule[$idx].icmp_type)
-    
-    # 第二步：把 "echo-request" 从这个字符串里变没（利用 sed 替换为空）
-    new_types=$(echo "$current_types" | sed 's/echo-request//g' | sed 's/  */ /g')
-    
-    # 第三步：把剩下的东西原封不动放回去
-    uci set firewall.@rule[$idx].icmp_type="$new_types"
+    uci del_list firewall.@rule[$idx].icmp_type='echo-request'
 fi
 
-# 4. 提交
+# 4. 提交并应用
 uci commit firewall
 
 # 其他
