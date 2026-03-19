@@ -130,6 +130,36 @@ elif [ "$count" -gt 1 ]; then
     uci commit network
 fi
 
+# 1. 取消 Fullcone NAT (0 为取消)
+uci set firewall.@defaults[0].fullcone='0'
+
+# 2. 修改 Allow-Ping 为丢弃
+for i in $(uci show firewall | grep "=rule" | cut -d'[' -f2 | cut -d']' -f1); do
+    if [ "$(uci -q get firewall.@rule[$i].name)" = "Allow-Ping" ]; then
+        uci set firewall.@rule[$i].target='DROP'
+    fi
+done
+
+# 3. 创建 icmpv6 规则
+uci set firewall.custom_drop_v6=rule
+uci set firewall.custom_drop_v6.name='icmpv6'
+uci set firewall.custom_drop_v6.src='wan'
+uci set firewall.custom_drop_v6.dest='*'
+uci set firewall.custom_drop_v6.proto='icmp'
+uci set firewall.custom_icmpv6_drop.family='ipv6'
+uci set firewall.custom_drop_v6.icmp_type='echo-request echo-reply'
+uci set firewall.custom_drop_v6.target='DROP'
+
+# 4. 寻找 Allow-ICMPv6-Input 的位置并把新规则插到它后面
+target_idx=$(uci show firewall | grep "name='Allow-ICMPv6-Input'" | cut -d'[' -f2 | cut -d']' -f1)
+if [ -n "$target_idx" ]; then
+    # 将我们命名的 custom_drop_v6 移动到目标位置
+    uci reorder firewall.custom_drop_v6=$((target_idx + 1))
+fi
+
+# 5. 最后提交保存
+uci commit firewall
+
 # 其他
 uci delete network.globals.ula_prefix
 uci set dhcp.@dnsmasq[0].min_cache_ttl='600'
@@ -143,25 +173,6 @@ uci add_list dhcp.@dnsmasq[0].address='/skk.moe/'
 uci add_list dhcp.@dnsmasq[0].address='/smtcdns.net/'
 uci add_list dhcp.@dnsmasq[0].address='/sukkaw.com/'
 uci add_list dhcp.@dnsmasq[0].address='/szbdyd.com/'
-uci set firewall.Allow_Ping.target='DROP'
-uci set firewall.@defaults[0].fullcone='0'
-
-target_idx=$(uci show firewall | grep "name='Allow-ICMPv6-Input'" | cut -d'[' -f2 | cut -d']' -f1)
-
-if [ -n "$target_idx" ]; then
-    uci add firewall rule
-    # 移动到目标规则下方
-    uci reorder firewall.@rule[-1]=$((target_idx + 1))
-    
-    # 配置新规则 icmpv6
-    uci set firewall.@rule[-1].name='icmpv6'
-    uci set firewall.@rule[-1].src='wan'
-    uci set firewall.@rule[-1].dest='*'
-    uci set firewall.@rule[-1].proto='icmp'
-    uci set firewall.@rule[-1].family='ipv6'
-    uci set firewall.@rule[-1].icmp_type='echo-request echo-reply'
-    uci set firewall.@rule[-1].target='DROP'
-fi
 uci commit
 
 exit 0
