@@ -133,13 +133,11 @@ fi
 # 1. 关闭 Fullcone NAT
 uci set firewall.@defaults[0].fullcone='0'
 
-# 2. 修改 Allow-Ping (匹配你在网页上看到的连字符名称)
-# 这一行逻辑：找到名字叫 Allow-Ping 的规则行号，并把它设为 DROP
+# 2. 修改 Allow-Ping
 idx=$(uci show firewall | grep "name='Allow-Ping'" | cut -d'[' -f2 | cut -d']' -f1)
 [ -n "$idx" ] && uci set firewall.@rule[$idx].target='DROP'
 
-# 3. 创建 icmpv6 规则并强制设为“仅 IPv6”
-# 给它一个临时 ID 'my_v6_rule' 确保不串号，不带任何端口
+# 3. 创建 icmpv6 规则 (强制仅 IPv6，防止带入多余端口)
 uci set firewall.my_v6_rule=rule
 uci set firewall.my_v6_rule.name='icmpv6'
 uci set firewall.my_v6_rule.src='wan'
@@ -149,9 +147,21 @@ uci set firewall.my_v6_rule.family='ipv6'
 uci set firewall.my_v6_rule.icmp_type='echo-request echo-reply'
 uci set firewall.my_v6_rule.target='DROP'
 
-# 4. 精准插队到 Allow-ICMPv6-Input 下方
-target_pos=$(uci show firewall | grep "name='Allow-ICMPv6-Input'" | cut -d'[' -f2 | cut -d']' -f1)
+# 4. 修复位置挪动逻辑 (仅在此处打补丁：兼容有无中括号的情况)
+target_pos=""
+count=0
+# 按顺序逐个读取所有规则的内部代号
+for sec in $(uci show firewall | grep "=rule" | cut -d'=' -f1 | cut -d'.' -f2); do
+    # 只要名字匹配上 Allow-ICMPv6-Input，就记录当前的真实序号
+    if [ "$(uci -q get firewall.$sec.name)" = "Allow-ICMPv6-Input" ]; then
+        target_pos=$count
+        break
+    fi
+    count=$((count + 1))
+done
+
 if [ -n "$target_pos" ]; then
+    # 挪动到目标序号的下一行
     uci reorder firewall.my_v6_rule=$((target_pos + 1))
 fi
 
